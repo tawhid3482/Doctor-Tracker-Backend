@@ -12,6 +12,7 @@ import { doctorsRouter } from './modules/doctors/doctors.router';
 import { patientsRouter } from './modules/patients/patients.router';
 
 export const app = express();
+export default app;
 app.use(helmet());
 app.use(cors({ origin: new URL(env.CLIENT_ORIGIN).origin, credentials: true }));
 app.use(express.json({ limit: '1mb' }));
@@ -19,6 +20,7 @@ app.use(cookieParser());
 app.use('/api/v1', rateLimit({ windowMs: 15 * 60 * 1000, limit: 300, standardHeaders: 'draft-7', legacyHeaders: false }));
 app.use('/api/v1', requireAllowedOrigin);
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+app.get('/', (_req, res) => res.json({ name: 'Doctor Tracker API', status: 'ok', health: '/health' }));
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/doctors', doctorsRouter);
 app.use('/api/v1/patients', patientsRouter);
