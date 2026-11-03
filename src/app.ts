@@ -1,0 +1,27 @@
+import express from 'express';
+import cookieParser from 'cookie-parser';
+import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import { env } from './config/env';
+import { errorHandler, notFound } from './middleware/errors';
+import { requireAllowedOrigin } from './middleware/origin';
+import { authRouter } from './modules/auth/auth.router';
+import { dashboardRouter } from './modules/dashboard/dashboard.router';
+import { doctorsRouter } from './modules/doctors/doctors.router';
+import { patientsRouter } from './modules/patients/patients.router';
+
+export const app = express();
+app.use(helmet());
+app.use(cors({ origin: new URL(env.CLIENT_ORIGIN).origin, credentials: true }));
+app.use(express.json({ limit: '1mb' }));
+app.use(cookieParser());
+app.use('/api/v1', rateLimit({ windowMs: 15 * 60 * 1000, limit: 300, standardHeaders: 'draft-7', legacyHeaders: false }));
+app.use('/api/v1', requireAllowedOrigin);
+app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+app.use('/api/v1/auth', authRouter);
+app.use('/api/v1/doctors', doctorsRouter);
+app.use('/api/v1/patients', patientsRouter);
+app.use('/api/v1/dashboard', dashboardRouter);
+app.use(notFound);
+app.use(errorHandler);
