@@ -1,46 +1,104 @@
 # Doctor Tracker API
 
-Standalone Express and Prisma backend for Doctor Tracker. This folder is its own repository root and can be cloned, installed, configured, and run without the frontend source being present.
+## Description
 
-## Requirements
+Doctor Tracker API is the secure data and authentication service for a clinic administration app. It provides validated endpoints for administrator sessions, doctor and patient records, and dashboard analytics, backed by MongoDB through Prisma.
+
+## Setup guide
+
+### Requirements
 
 - Node.js 20 or newer
 - MongoDB connection string (MongoDB replica set recommended for Prisma transaction support)
 
-## Local setup
+### Install and run locally
 
-```sh
-npm install
+1. Install dependencies:
+
+   ```sh
+   npm install
+   ```
+
+2. Copy `.env.example` to `.env` (`Copy-Item .env.example .env` in PowerShell).
+3. Set `DATABASE_URL`, `CLIENT_ORIGIN`, independent JWT secrets, and the initial administrator name, email, and password in `.env`. Generate strong secrets with:
+
+   ```sh
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+   ```
+
+4. Generate Prisma Client, apply the schema, and start the API:
+
+   ```sh
+   npm run db:generate
+   npm run db:push
+   npm run dev
+   ```
+
+The API listens at `http://localhost:4000`. On startup it connects to MongoDB and creates the initial administrator only if no admin exists. There is no public registration endpoint. `.env.example` lists every supported environment variable; replace all example secrets and credentials for real deployments.
+
+### Environment variables
+
+| Variable | Description |
+| --- | --- |
+| `PORT` | API port, default `4000` |
+| `DATABASE_URL` | MongoDB connection string |
+| `CLIENT_ORIGIN` | Exact frontend origin allowed by CORS |
+| `JWT_ACCESS_SECRET` | Access token signing secret, 32+ characters |
+| `JWT_REFRESH_SECRET` | Separate refresh token signing secret, 32+ characters |
+| `ACCESS_TOKEN_TTL` | Access token lifetime, default `15m` |
+| `REFRESH_TOKEN_TTL` | Refresh token lifetime, default `7d` |
+| `ADMIN_NAME` | Initial administrator name |
+| `ADMIN_EMAIL` | Initial administrator email |
+| `ADMIN_PASSWORD` | Initial administrator password, at least 12 characters |
+
+## System architecture
+
+The Next.js frontend makes credentialed requests to the Express API. Security headers, rate limiting, origin checks, JSON limits, and cookie parsing run before feature routers. Each router sends validated input to a controller, then to a service that performs database work through Prisma. At startup, Prisma connects before the one-time administrator bootstrap runs and the API begins accepting requests.
+
+```mermaid
+flowchart LR
+  A[Next.js browser app] -->|REST and HTTP-only cookies| B[Express middleware]
+  B --> C[Auth / Doctors / Patients / Dashboard routers]
+  C --> D[Zod validation and controllers]
+  D --> E[Feature services]
+  E --> F[Prisma]
+  F --> G[(MongoDB)]
 ```
 
-Copy `.env.example` to `.env` and set values for MongoDB, the allowed browser origin, two independent JWT signing secrets, and the initial administrator account. Generate secrets with:
+Feature modules are organized in `src/modules/`; shared middleware, database configuration, response helpers, and error handling live in `src/middleware`, `src/config`, and `src/utils`.
 
-```sh
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
+## Technical decisions
 
-Run these commands from this directory:
+1. **Feature modules with schema validation at the API boundary.** Routes, controllers, services, and Zod schemas live together for auth, doctors, patients, and dashboard features. Controllers validate request data before services run, which keeps HTTP handling separate from business and database logic. The structure adds a few files per feature but makes changes and validation rules easier to locate.
+2. **Prisma with MongoDB and HTTP-only JWT cookies.** Prisma provides typed queries and the schema declares indexes for common doctor, condition, gender, and creation-date queries. Dashboard summaries use database aggregates rather than loading every record. Short-lived access and refresh JWTs stay in HTTP-only cookies; origin checks protect state-changing requests. MongoDB must be reachable and Prisma Client generated before startup.
 
-```sh
-npm run db:generate
-npm run db:push
-npm run dev
-```
+## Visual evidence
 
-The API connects to MongoDB and checks for an administrator before listening on `http://localhost:4000`. If no admin exists, it creates the first one from `ADMIN_NAME`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD`. If an admin already exists, startup leaves the account unchanged. `npm run seed` runs the same safe, one-time check manually when needed. No public registration route is provided.
+These captures show the frontend workflows backed by this API. The original UI captures are also maintained in the frontend repository.
 
-## Module layout
+### Desktop
 
-Each feature keeps HTTP routes, controllers, business/data services, and Zod validation together:
+| Dashboard | Doctors |
+| --- | --- |
+| ![Doctor Tracker dashboard on desktop](docs/screenshots/dashboard-desktop.png) | ![Doctor list on desktop](docs/screenshots/doctors-desktop.png) |
 
-```text
-src/modules/auth/       auth.router.ts, auth.controller.ts, auth.service.ts, auth.validation.ts
-src/modules/doctors/    doctors.router.ts, doctors.controller.ts, doctors.service.ts, doctors.validation.ts
-src/modules/patients/   patients.router.ts, patients.controller.ts, patients.service.ts, patients.validation.ts
-src/modules/dashboard/ dashboard.router.ts, dashboard.controller.ts, dashboard.service.ts, dashboard.validation.ts
-```
+![Patient list on desktop](docs/screenshots/patients-desktop.png)
 
-`app.ts` mounts the feature routers; shared middleware, database setup, response helpers, and errors remain in `src/middleware`, `src/config`, and `src/utils`.
+### Mobile
+
+| Dashboard | Doctors |
+| --- | --- |
+| ![Doctor Tracker dashboard on mobile](docs/screenshots/dashboard-mobile.png) | ![Doctor list on mobile](docs/screenshots/doctors-mobile.png) |
+
+![Mobile navigation drawer](docs/screenshots/navigation-mobile.png)
+
+![Patient list on mobile](docs/screenshots/patients-mobile.png)
+
+## API
+
+All routes are prefixed with `/api/v1`. Authentication endpoints are `/auth/login`, `/auth/refresh`, `/auth/logout`, and `/auth/me`. Protected resources include `/doctors`, `/patients`, and `/dashboard/overview`, `/dashboard/patient-trends`, `/dashboard/doctor-statistics`, and `/dashboard/condition-statistics`.
+
+The API uses HTTP-only cookies and checks browser `Origin` on state-changing requests. Cookies use `SameSite=Lax` in development and `SameSite=None; Secure` in production so separately hosted frontend and backend origins can authenticate. In production, use HTTPS, separate strong signing keys, restrict MongoDB network access, and set `CLIENT_ORIGIN` to the exact frontend origin.
 
 ## Scripts
 
@@ -53,45 +111,3 @@ src/modules/dashboard/ dashboard.router.ts, dashboard.controller.ts, dashboard.s
 | `npm run db:push` | Apply the Prisma schema to MongoDB |
 | `npm run seed` | Create the configured admin only when no admin exists |
 | `npm test` | Run admin bootstrap, auth, and request validation tests |
-
-## Configuration
-
-| Variable | Description |
-| --- | --- |
-| `PORT` | API port, default `4000` |
-| `DATABASE_URL` | MongoDB connection string |
-| `CLIENT_ORIGIN` | Exact frontend origin allowed by CORS |
-| `JWT_ACCESS_SECRET` | Access-token signing secret, 32+ characters |
-| `JWT_REFRESH_SECRET` | Separate refresh-token signing secret, 32+ characters |
-| `ACCESS_TOKEN_TTL` | Access token lifetime, default `15m` |
-| `REFRESH_TOKEN_TTL` | Refresh token lifetime, default `7d` |
-| `ADMIN_NAME` | Seed administrator name |
-| `ADMIN_EMAIL` | Seed administrator email |
-| `ADMIN_PASSWORD` | Seed administrator password, at least 12 characters |
-
-## API
-
-All routes are prefixed with `/api/v1`. Auth endpoints are `/auth/login`, `/auth/refresh`, `/auth/logout`, and `/auth/me`. Protected resources include `/doctors`, `/patients`, and `/dashboard/overview`, `/dashboard/patient-trends`, `/dashboard/doctor-statistics`, and `/dashboard/condition-statistics`.
-
-The API uses HTTP-only cookies and checks the browser `Origin` on state-changing requests. Cookies use `SameSite=Lax` in development and `SameSite=None; Secure` in production so separately hosted frontend/backend origins can authenticate. In production, serve over HTTPS, use separate strong signing keys, restrict MongoDB network access, and set `CLIENT_ORIGIN` to the exact frontend origin.
-
-## System architecture
-
-The frontend and API are independent applications and can live in separate repositories. A browser page uses TanStack Query to call the Express REST API with credentialed requests. Express applies security headers, rate limits, origin checks, JSON limits, and cookie parsing before it mounts feature routers. Authentication uses short-lived access and refresh JWTs in HTTP-only cookies. Feature routers call validated controllers and services; services query MongoDB through Prisma. On server startup Prisma connects first, then the one-time administrator bootstrap runs before the API starts accepting requests.
-
-```text
-Browser (Next.js + TanStack Query)
-  └─ REST + HTTP-only cookies → Express API (/api/v1)
-       ├─ Auth / Doctors / Patients / Dashboard modules
-       ├─ validation → controllers → services
-       └─ Prisma → MongoDB
-```
-
-## Technical decisions
-
-1. **Separate client and server repositories.** The UI and API have independent package manifests, lockfiles, environment files, and setup guides. This lets teams deploy them independently and keeps frontend builds from depending on backend source. The tradeoff is that CORS, cookie settings, and API URLs must agree across deployments.
-2. **Prisma with MongoDB and HTTP-only JWT cookies.** Prisma provides typed data access and the schema declares indexes for doctor, condition, gender, and creation-date queries. Dashboard summaries use grouped/aggregate queries instead of loading every record. JWTs stay out of browser storage; the API validates cookies and checks the configured origin on writes. MongoDB must be reachable and Prisma Client generated before the API can run.
-
-## Visual evidence
-
-Desktop and mobile screenshots are not checked in yet. Capture the real dashboard, doctor list/profile, and patient list at desktop and narrow viewport sizes after starting both apps with a development MongoDB database containing sample records. Do not use fabricated production statistics.
