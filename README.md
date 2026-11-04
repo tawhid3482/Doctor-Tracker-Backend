@@ -36,6 +36,16 @@ Doctor Tracker API is the secure data and authentication service for a clinic ad
 
 The API listens at `http://localhost:4000`. On startup it connects to MongoDB and creates the initial administrator only if no admin exists. There is no public registration endpoint. `.env.example` lists every supported environment variable; replace all example secrets and credentials for real deployments.
 
+### Local test admin credentials
+
+The checked-in `.env.example` is configured with these local testing credentials:
+
+| Email | Password |
+| --- | --- |
+| `admin@gmail.com` | `admin1234567` |
+
+Copy `.env.example` to `.env` to use them, then start the API after MongoDB and the Prisma schema are ready. The API creates this admin only when the database has no admin account. If an admin already exists, bootstrap does not change its email or password. Use these credentials for local testing only; set your own credentials before deployment.
+
 ### Environment variables
 
 | Variable | Description |
